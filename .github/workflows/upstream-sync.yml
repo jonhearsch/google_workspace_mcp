@@ -1,0 +1,74 @@
+name: Sync with Upstream
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/taylorwilsdon/google_workspace_mcp.git
+          git fetch upstream
+
+      - name: Check for new releases
+        id: check_release
+        run: |
+          # Get latest upstream release
+          LATEST_UPSTREAM=$(git ls-remote --tags upstream | grep -v '\^{}' | sort -V | tail -n1 | sed 's/.*\///')
+
+          # Get latest local release
+          LATEST_LOCAL=$(git ls-remote --tags origin | grep -v '\^{}' | sort -V | tail -n1 | sed 's/.*\///' || echo "none")
+
+          echo "latest_upstream=$LATEST_UPSTREAM" >> $GITHUB_OUTPUT
+          echo "latest_local=$LATEST_LOCAL" >> $GITHUB_OUTPUT
+
+          if [ "$LATEST_UPSTREAM" != "$LATEST_LOCAL" ]; then
+            echo "has_new_release=true" >> $GITHUB_OUTPUT
+            echo "New release detected: $LATEST_UPSTREAM (current: $LATEST_LOCAL)"
+          else
+            echo "has_new_release=false" >> $GITHUB_OUTPUT
+            echo "No new releases"
+          fi
+
+      - name: Merge upstream changes
+        if: steps.check_release.outputs.has_new_release == 'true'
+        run: |
+          git merge upstream/main --allow-unrelated-histories -m "Merge upstream release ${{ steps.check_release.outputs.latest_upstream }}"
+          git push origin main
+
+      - name: Create matching release
+        if: steps.check_release.outputs.has_new_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.check_release.outputs.latest_upstream }}"
+
+          # Get release notes from upstream
+          RELEASE_NOTES=$(gh release view "$TAG" --repo taylorwilsdon/google_workspace_mcp --json body -q .body || echo "Synced from upstream release $TAG")
+
+          # Create the tag
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+          # Create the release
+          gh release create "$TAG" \
+            --title "Release $TAG" \
+            --notes "$RELEASE_NOTES" \
+            --repo jonhearsch/google_workspace_mcp
