@@ -1,0 +1,281 @@
+# LiteLLM Configuration for Google Workspace MCP
+#
+# This file configures:
+# 1. Which LLM models are available
+# 2. How to connect to the Google Workspace MCP server
+# 3. Caching, fallbacks, and other settings
+#
+# See: https://docs.litellm.ai/docs/proxy/configs
+
+# ============================================
+# Model Configurations
+# ============================================
+# Add models from different providers
+# Models will be available at: http://localhost:4000/v1/chat/completions
+
+model_list:
+  # ============================================
+  # OpenAI Models
+  # ============================================
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+      timeout: 120
+
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+      timeout: 120
+
+  - model_name: gpt-4-turbo
+    litellm_params:
+      model: openai/gpt-4-turbo-preview
+      api_key: os.environ/OPENAI_API_KEY
+      timeout: 120
+
+  # ============================================
+  # Anthropic Models (Claude)
+  # ============================================
+  - model_name: claude-3-5-sonnet-20241022
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+      timeout: 120
+
+  - model_name: claude-3-5-haiku-20241022
+    litellm_params:
+      model: anthropic/claude-3-5-haiku-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+      timeout: 120
+
+  # ============================================
+  # Google Gemini Models
+  # ============================================
+  # Uncomment to enable Gemini models
+  # - model_name: gemini-1.5-pro
+  #   litellm_params:
+  #     model: gemini/gemini-1.5-pro
+  #     api_key: os.environ/GEMINI_API_KEY
+
+  # - model_name: gemini-1.5-flash
+  #   litellm_params:
+  #     model: gemini/gemini-1.5-flash
+  #     api_key: os.environ/GEMINI_API_KEY
+
+  # ============================================
+  # Local Models (Ollama)
+  # ============================================
+  # Requires Ollama running on host or in Docker
+  # Pull models: ollama pull llama3.2
+
+  - model_name: llama3.2
+    litellm_params:
+      model: ollama/llama3.2
+      api_base: os.environ/OLLAMA_API_BASE
+
+  - model_name: llama3.2:3b
+    litellm_params:
+      model: ollama/llama3.2:3b
+      api_base: os.environ/OLLAMA_API_BASE
+
+  # Other popular Ollama models
+  # - model_name: mistral
+  #   litellm_params:
+  #     model: ollama/mistral
+  #     api_base: os.environ/OLLAMA_API_BASE
+
+  # - model_name: codellama
+  #   litellm_params:
+  #     model: ollama/codellama
+  #     api_base: os.environ/OLLAMA_API_BASE
+
+  # - model_name: phi3
+  #   litellm_params:
+  #     model: ollama/phi3
+  #     api_base: os.environ/OLLAMA_API_BASE
+
+# ============================================
+# MCP Server Configuration
+# ============================================
+# Google Workspace MCP Server provides tools for:
+# - Gmail (search, send, manage)
+# - Calendar (events, create, modify)
+# - Drive (search, share, manage)
+# - Docs, Sheets, Slides (create, edit)
+# - And more...
+
+mcp_servers:
+  - name: google_workspace
+    # URL must match the service name in docker-compose
+    url: http://gws_mcp:8000/mcp
+    transport: http
+    # No auth needed - single-user mode handles authentication
+
+# ============================================
+# LiteLLM Settings
+# ============================================
+
+litellm_settings:
+  # ============================================
+  # Caching (requires Redis)
+  # ============================================
+  # Uncomment to enable caching
+  # cache: true
+  # cache_params:
+  #   type: redis
+  #   host: os.environ/REDIS_HOST
+  #   port: os.environ/REDIS_PORT
+  #   ttl: 3600  # Cache responses for 1 hour
+
+  # ============================================
+  # Rate Limiting
+  # ============================================
+  # Global rate limits
+  # rpm: 100  # Requests per minute
+  # tpm: 50000  # Tokens per minute
+  # max_parallel_requests: 10
+
+  # ============================================
+  # Fallback Models
+  # ============================================
+  # If primary model fails, automatically use fallback
+  # fallbacks:
+  #   - gpt-4o: [claude-3-5-sonnet-20241022, gpt-4o-mini]
+  #   - claude-3-5-sonnet-20241022: [gpt-4o, gpt-4o-mini]
+
+  # ============================================
+  # Model Aliases
+  # ============================================
+  # Create aliases for easier model selection
+  # model_alias:
+  #   "gpt-4": "gpt-4o"
+  #   "claude": "claude-3-5-sonnet-20241022"
+  #   "fast": "gpt-4o-mini"
+  #   "local": "llama3.2"
+
+  # ============================================
+  # Logging and Monitoring
+  # ============================================
+  # Log successful requests
+  # success_callback: ["langfuse"]  # Or: ["s3", "gcs", etc.]
+
+  # Log failed requests
+  # failure_callback: ["sentry"]
+
+  # General logging
+  # set_verbose: true
+  # json_logs: true
+
+  # ============================================
+  # Cost Tracking
+  # ============================================
+  # Requires database (uncomment postgres in docker-compose)
+  # max_budget: 100  # Maximum spend in USD
+  # budget_duration: "monthly"
+
+  # ============================================
+  # Security
+  # ============================================
+  # Drop unmapped params (recommended)
+  drop_params: true
+
+  # Allow model overrides
+  # disable_model_overrides: false
+
+  # ============================================
+  # Advanced Settings
+  # ============================================
+  # Timeout for model requests
+  request_timeout: 600  # 10 minutes
+
+  # Number of retries
+  num_retries: 3
+
+  # Enable streaming by default
+  # stream: true
+
+# ============================================
+# Router Settings (Load Balancing)
+# ============================================
+# Uncomment for advanced load balancing between models
+
+# router_settings:
+#   routing_strategy: "least-busy"  # Options: simple-shuffle, least-busy, usage-based-routing
+#   model_group_alias:
+#     "gpt-4":
+#       - gpt-4o
+#       - gpt-4-turbo
+
+# ============================================
+# General Settings
+# ============================================
+
+general_settings:
+  # Master key for authentication
+  # Set via LITELLM_MASTER_KEY environment variable
+  # master_key: os.environ/LITELLM_MASTER_KEY
+
+  # Database for persistence (requires postgres service)
+  # database_url: os.environ/DATABASE_URL
+
+  # ============================================
+  # UI Settings
+  # ============================================
+  # Access UI at http://localhost:4000/ui
+  # ui_username: os.environ/UI_USERNAME
+  # ui_password: os.environ/UI_PASSWORD
+
+  # ============================================
+  # CORS Settings
+  # ============================================
+  # Uncomment if accessing from browser
+  # allowed_origins: ["*"]
+
+  # ============================================
+  # Custom Headers
+  # ============================================
+  # Add custom headers to requests
+  # headers:
+  #   X-Custom-Header: "value"
+
+# ============================================
+# Example: Complete Setup with All Features
+# ============================================
+# Uncomment sections below for a full-featured setup
+
+# litellm_settings:
+#   # Enable caching
+#   cache: true
+#   cache_params:
+#     type: redis
+#     host: redis
+#     port: 6379
+#     ttl: 3600
+#
+#   # Rate limiting
+#   rpm: 100
+#   max_parallel_requests: 10
+#
+#   # Fallbacks
+#   fallbacks:
+#     - gpt-4o: [claude-3-5-sonnet-20241022, gpt-4o-mini]
+#
+#   # Model aliases
+#   model_alias:
+#     "gpt-4": "gpt-4o"
+#     "claude": "claude-3-5-sonnet-20241022"
+#
+#   # Logging
+#   success_callback: ["langfuse"]
+#   set_verbose: true
+#   json_logs: true
+#
+#   # Security
+#   drop_params: true
+#
+# general_settings:
+#   master_key: os.environ/LITELLM_MASTER_KEY
+#   database_url: os.environ/DATABASE_URL
+#   allowed_origins: ["*"]

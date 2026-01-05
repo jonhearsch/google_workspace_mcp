@@ -1,0 +1,207 @@
+# Docker Compose for LiteLLM + Google Workspace MCP Server
+#
+# Quick Start:
+# 1. cp .env.litellm.example .env
+# 2. Edit .env with your credentials (Google OAuth + LLM API keys)
+# 3. docker-compose -f docker-compose.litellm.yml up -d
+# 4. Test: curl http://localhost:4000/health
+# 5. Use: OpenAI-compatible API at http://localhost:4000/v1
+
+version: '3.8'
+
+services:
+  # Google Workspace MCP Server
+  gws_mcp:
+    image: ghcr.io/jonhearsch/google_workspace_mcp:latest
+    # Or build locally:
+    # build: .
+
+    container_name: gws_mcp
+
+    # Internal port - accessed by LiteLLM via Docker network
+    expose:
+      - "8000"
+
+    # Optional: Expose for debugging
+    # ports:
+    #   - "8000:8000"
+
+    environment:
+      # Required: Google OAuth Credentials
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+
+      # Single-user mode (all requests use your Google account)
+      - MCP_SINGLE_USER_MODE=1
+      - USER_GOOGLE_EMAIL=${USER_GOOGLE_EMAIL}
+
+      # Development mode (allows HTTP redirect URIs)
+      # Remove in production with HTTPS
+      - OAUTHLIB_INSECURE_TRANSPORT=1
+
+      # Server configuration
+      - WORKSPACE_MCP_PORT=8000
+      - GOOGLE_MCP_CREDENTIALS_DIR=/app/store_creds
+
+      # Tool Selection - Choose ONE:
+      # Option 1: Use tool tiers (recommended)
+      - TOOL_TIER=${TOOL_TIER:-core}
+
+      # Option 2: Specific tools (uncomment to use)
+      # - TOOLS=gmail,drive,calendar,docs
+
+      # Optional: Custom Search API
+      - GOOGLE_PSE_API_KEY=${GOOGLE_PSE_API_KEY:-}
+      - GOOGLE_PSE_ENGINE_ID=${GOOGLE_PSE_ENGINE_ID:-}
+
+    volumes:
+      # Persistent storage for Google OAuth credentials
+      - gws_creds:/app/store_creds:rw
+
+    networks:
+      - litellm_network
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # LiteLLM Proxy Server
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm
+
+    ports:
+      - "${LITELLM_PORT:-4000}:4000"
+
+    environment:
+      # LiteLLM master key for securing the proxy
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-1234}
+
+      # LLM Provider API Keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - COHERE_API_KEY=${COHERE_API_KEY:-}
+
+      # Optional: Ollama (local models)
+      - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://host.docker.internal:11434}
+
+      # Optional: Database for logging and persistence
+      - DATABASE_URL=${DATABASE_URL:-}
+
+      # Optional: Redis for caching
+      - REDIS_HOST=${REDIS_HOST:-}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+
+      # Optional: Enable UI
+      - UI_USERNAME=${UI_USERNAME:-admin}
+      - UI_PASSWORD=${UI_PASSWORD:-admin}
+
+      # Logging
+      - LITELLM_LOG=INFO
+
+    volumes:
+      # Mount configuration file
+      - ./litellm_config.yaml:/app/config.yaml:ro
+
+    networks:
+      - litellm_network
+
+    # Allow access to host for Ollama
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    restart: unless-stopped
+
+    depends_on:
+      gws_mcp:
+        condition: service_healthy
+
+    # Optional: Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Optional: PostgreSQL for LiteLLM logging and persistence
+  # Uncomment to enable database support
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: litellm_postgres
+  #   environment:
+  #     - POSTGRES_USER=litellm
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-litellm_password}
+  #     - POSTGRES_DB=litellm
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - litellm_network
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U litellm"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # Optional: Redis for caching
+  # Uncomment to enable caching support
+  # redis:
+  #   image: redis:alpine
+  #   container_name: litellm_redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - litellm_network
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # Optional: Ollama (local models)
+  # Uncomment if you want to run Ollama in Docker instead of on host
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   networks:
+  #     - litellm_network
+  #   restart: unless-stopped
+  #   # For GPU support (NVIDIA)
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - driver: nvidia
+  #   #           count: all
+  #   #           capabilities: [gpu]
+
+volumes:
+  gws_creds:
+    driver: local
+  # postgres_data:
+  #   driver: local
+  # redis_data:
+  #   driver: local
+  # ollama_data:
+  #   driver: local
+
+networks:
+  litellm_network:
+    driver: bridge
