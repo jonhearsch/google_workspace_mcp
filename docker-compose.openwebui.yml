@@ -1,0 +1,170 @@
+# Docker Compose for Open WebUI + Google Workspace MCP Server
+#
+# Quick Start:
+# 1. cp .env.docker.example .env
+# 2. Edit .env with your Google OAuth credentials
+# 3. docker-compose -f docker-compose.openwebui.yml up -d
+# 4. Open http://localhost:3000
+# 5. Configure MCP server in Open WebUI: http://gws_mcp:8000/mcp
+
+version: '3.8'
+
+services:
+  # Google Workspace MCP Server
+  gws_mcp:
+    image: ghcr.io/jonhearsch/google_workspace_mcp:latest
+    # Or build locally:
+    # build: .
+
+    container_name: gws_mcp
+
+    # Internal port only - accessed by Open WebUI via Docker network
+    expose:
+      - "8000"
+
+    # Optional: Expose for debugging
+    ports:
+      - "8000:8000"
+
+    environment:
+      # Required: Google OAuth Credentials
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+
+      # Authentication Mode - Choose ONE:
+
+      # Option A: Single-User Mode (Recommended for personal use)
+      # All Open WebUI users access the same Google account
+      - MCP_SINGLE_USER_MODE=${MCP_SINGLE_USER_MODE:-1}
+      - USER_GOOGLE_EMAIL=${USER_GOOGLE_EMAIL}
+
+      # Option B: Multi-User Mode (Uncomment for multi-tenant)
+      # Each user needs their own OAuth token (requires Open WebUI support)
+      # - MCP_SINGLE_USER_MODE=0
+      # - MCP_ENABLE_OAUTH21=true
+      # - EXTERNAL_OAUTH21_PROVIDER=true
+      # - WORKSPACE_MCP_STATELESS_MODE=true
+
+      # Development mode (allows HTTP redirect URIs)
+      # Remove in production and use HTTPS
+      - OAUTHLIB_INSECURE_TRANSPORT=1
+
+      # Server configuration
+      - WORKSPACE_MCP_BASE_URI=http://localhost
+      - WORKSPACE_MCP_PORT=8000
+      - GOOGLE_MCP_CREDENTIALS_DIR=/app/store_creds
+
+      # Tool Selection - Choose ONE:
+      # Option 1: Use tool tiers
+      - TOOL_TIER=${TOOL_TIER:-core}
+      # Option 2: Specify individual tools (uncomment to use)
+      # - TOOLS=gmail,drive,calendar,docs
+
+      # Optional: Custom Search API
+      - GOOGLE_PSE_API_KEY=${GOOGLE_PSE_API_KEY:-}
+      - GOOGLE_PSE_ENGINE_ID=${GOOGLE_PSE_ENGINE_ID:-}
+
+    volumes:
+      # Persistent storage for credentials
+      - gws_creds:/app/store_creds:rw
+
+      # Optional: Mount client_secret.json if using file-based credentials
+      # - ./client_secret.json:/app/client_secret.json:ro
+
+    networks:
+      - openwebui_network
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Open WebUI
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+
+    ports:
+      - "${OPEN_WEBUI_PORT:-3000}:8080"
+
+    environment:
+      # LLM Backend - Choose ONE:
+
+      # Option A: Ollama (local models)
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+
+      # Option B: OpenAI API
+      # - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Option C: Other compatible APIs (Anthropic, etc.)
+      # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+
+      # Enable MCP support
+      - ENABLE_MCP=${ENABLE_MCP:-true}
+
+      # Optional: Enable admin features
+      - WEBUI_AUTH=${WEBUI_AUTH:-true}
+
+    volumes:
+      # Persistent storage for Open WebUI data
+      - open-webui-data:/app/backend/data
+
+    # Allow access to host for Ollama
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    networks:
+      - openwebui_network
+
+    restart: unless-stopped
+
+    depends_on:
+      gws_mcp:
+        condition: service_healthy
+
+    # Optional: Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Optional: Ollama service (if not running on host)
+  # Uncomment to run Ollama in Docker
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   networks:
+  #     - openwebui_network
+  #   restart: unless-stopped
+  #   # For GPU support (NVIDIA)
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - driver: nvidia
+  #   #           count: all
+  #   #           capabilities: [gpu]
+
+volumes:
+  gws_creds:
+    driver: local
+  open-webui-data:
+    driver: local
+  # ollama-data:
+  #   driver: local
+
+networks:
+  openwebui_network:
+    driver: bridge
