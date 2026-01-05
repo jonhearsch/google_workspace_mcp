@@ -1,42 +1,77 @@
-# Git and version control
+# Git files
 .git
+.github
 .gitignore
-gitdiff.txt
+.gitattributes
 
-# Documentation and notes
-*.md
-AUTHENTICATION_REFACTOR_PROPOSAL.md
-leverage_fastmcp_responses.md
-
-# Test files and coverage
-tests/
-htmlcov/
-.coverage
-pytest_out.txt
-
-# Build artifacts
-build/
-dist/
-*.egg-info/
-
-# Development files
-mcp_server_debug.log
-.credentials/
-
-# Cache and temporary files
-__pycache__/
+# Python cache
+__pycache__
 *.pyc
 *.pyo
 *.pyd
 .Python
-.pytest_cache/
+*.so
+*.egg
+*.egg-info
+dist
+build
+.eggs
 
-# IDE files
-.vscode/
-.idea/
+# Virtual environments
+venv
+env
+ENV
+.venv
+
+# IDE
+.vscode
+.idea
 *.swp
 *.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.mypy_cache
+.ruff_cache
+
+# Documentation (not needed in container)
+*.md
+!README.md
+docs/
+
+# Credentials and secrets (never include)
+.env
+.env.*
+!.env.docker.example
+client_secret.json
+.credentials/
+store_creds/
+token.json
+credentials.json
+
+# Docker files (not needed in build)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+
+# Temporary files
+*.log
+*.tmp
+*.temp
+.cache
 
 # OS files
-.DS_Store
 Thumbs.db
+.DS_Store
+
+# Project specific
+tests/
+*.dxt

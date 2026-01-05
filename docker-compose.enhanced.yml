@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  gws_mcp:
+    # Option 1: Build from local Dockerfile
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # Option 2: Use pre-built image from GHCR (uncomment to use)
+    # image: ghcr.io/jonhearsch/google_workspace_mcp:latest
+
+    container_name: gws_mcp
+
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+
+    environment:
+      # Required: OAuth credentials
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+
+      # Required for development (allows http redirect URIs)
+      - OAUTHLIB_INSECURE_TRANSPORT=1
+
+      # Optional: Default user email
+      - USER_GOOGLE_EMAIL=${USER_GOOGLE_EMAIL:-}
+
+      # Optional: Custom Search API
+      - GOOGLE_PSE_API_KEY=${GOOGLE_PSE_API_KEY:-}
+      - GOOGLE_PSE_ENGINE_ID=${GOOGLE_PSE_ENGINE_ID:-}
+
+      # Optional: OAuth 2.1 multi-user support
+      - MCP_ENABLE_OAUTH21=${MCP_ENABLE_OAUTH21:-false}
+
+      # Optional: External OAuth provider mode
+      - EXTERNAL_OAUTH21_PROVIDER=${EXTERNAL_OAUTH21_PROVIDER:-false}
+
+      # Optional: Stateless mode (requires OAuth 2.1)
+      - WORKSPACE_MCP_STATELESS_MODE=${WORKSPACE_MCP_STATELESS_MODE:-false}
+
+      # Server configuration
+      - WORKSPACE_MCP_BASE_URI=${WORKSPACE_MCP_BASE_URI:-http://localhost}
+      - WORKSPACE_MCP_PORT=${PORT:-8000}
+      - GOOGLE_MCP_CREDENTIALS_DIR=/app/store_creds
+
+      # Tool selection (choose one method)
+      # Method 1: Use tool tiers (core, extended, complete)
+      - TOOL_TIER=${TOOL_TIER:-}
+
+      # Method 2: Specify individual tools
+      # - TOOLS=gmail drive calendar
+
+    volumes:
+      # Mount OAuth client secret (if using file-based credentials)
+      - ./client_secret.json:/app/client_secret.json:ro
+
+      # Persistent storage for user credentials
+      - store_creds:/app/store_creds:rw
+
+      # Optional: Mount custom .env file
+      # - ./.env:/app/.env:ro
+
+    # Load additional environment variables from .env file
+    env_file:
+      - .env
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Resource limits (optional but recommended)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+volumes:
+  store_creds:
+    driver: local
