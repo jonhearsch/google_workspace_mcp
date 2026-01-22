@@ -11,11 +11,15 @@ gmail:
     - list_gmail_labels
     - manage_gmail_label
     - draft_gmail_message
+    - get_gmail_attachment_content
 
   complete:
     - get_gmail_threads_content_batch
     - batch_modify_gmail_message_labels
     - start_google_auth
+    - list_gmail_filters
+    - create_gmail_filter
+    - delete_gmail_filter
 
 drive:
   core:
