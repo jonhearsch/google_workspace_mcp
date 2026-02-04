@@ -4,6 +4,7 @@ import logging
 import re
 from functools import wraps
 from typing import Dict, List, Optional, Any, Callable, Union, Tuple
+from contextlib import ExitStack
 
 from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
@@ -45,6 +46,8 @@ from auth.scopes import (
     SLIDES_READONLY_SCOPE,
     TASKS_SCOPE,
     TASKS_READONLY_SCOPE,
+    CONTACTS_SCOPE,
+    CONTACTS_READONLY_SCOPE,
     CUSTOM_SEARCH_SCOPE,
     SCRIPT_PROJECTS_SCOPE,
     SCRIPT_PROJECTS_READONLY_SCOPE,
@@ -77,8 +80,8 @@ def _get_auth_context(
         if mcp_session_id:
             set_fastmcp_session_id(mcp_session_id)
 
-        logger.debug(
-            f"[{tool_name}] Auth from middleware: {authenticated_user} via {auth_method}"
+        logger.info(
+            f"[{tool_name}] Auth from middleware: authenticated_user={authenticated_user}, auth_method={auth_method}, session_id={mcp_session_id}"
         )
         return authenticated_user, auth_method, mcp_session_id
 
@@ -405,6 +408,7 @@ SERVICE_CONFIGS = {
     "forms": {"service": "forms", "version": "v1"},
     "slides": {"service": "slides", "version": "v1"},
     "tasks": {"service": "tasks", "version": "v1"},
+    "people": {"service": "people", "version": "v1"},
     "customsearch": {"service": "customsearch", "version": "v1"},
     "script": {"service": "script", "version": "v1"},
 }
@@ -445,6 +449,9 @@ SCOPE_GROUPS = {
     # Tasks scopes
     "tasks": TASKS_SCOPE,
     "tasks_read": TASKS_READONLY_SCOPE,
+    # Contacts scopes
+    "contacts": CONTACTS_SCOPE,
+    "contacts_read": CONTACTS_READONLY_SCOPE,
     # Custom Search scope
     "customsearch": CUSTOM_SEARCH_SCOPE,
     # Apps Script scopes
@@ -681,6 +688,9 @@ def require_google_service(
                     e, actual_user_email, service_name
                 )
                 raise GoogleAuthenticationError(error_message)
+            finally:
+                if service:
+                    service.close()
 
         # Set the wrapper's signature to the one without 'service'
         wrapper.__signature__ = wrapper_sig
@@ -692,6 +702,9 @@ def require_google_service(
             )
             if func.__doc__:
                 wrapper.__doc__ = _remove_user_email_arg_from_docstring(func.__doc__)
+
+        # Attach required scopes to the wrapper for tool filtering
+        wrapper._required_google_scopes = _resolve_scopes(scopes)
 
         return wrapper
 
@@ -751,74 +764,76 @@ def require_multiple_services(service_configs: List[Dict[str, Any]]):
                 )
 
             # Authenticate all services
-            for config in service_configs:
-                service_type = config["service_type"]
-                scopes = config["scopes"]
-                param_name = config["param_name"]
-                version = config.get("version")
+            with ExitStack() as stack:
+                for config in service_configs:
+                    service_type = config["service_type"]
+                    scopes = config["scopes"]
+                    param_name = config["param_name"]
+                    version = config.get("version")
 
-                if service_type not in SERVICE_CONFIGS:
-                    raise Exception(f"Unknown service type: {service_type}")
+                    if service_type not in SERVICE_CONFIGS:
+                        raise Exception(f"Unknown service type: {service_type}")
 
-                service_config = SERVICE_CONFIGS[service_type]
-                service_name = service_config["service"]
-                service_version = version or service_config["version"]
-                resolved_scopes = _resolve_scopes(scopes)
+                    service_config = SERVICE_CONFIGS[service_type]
+                    service_name = service_config["service"]
+                    service_version = version or service_config["version"]
+                    resolved_scopes = _resolve_scopes(scopes)
 
-                try:
-                    # Detect OAuth version (simplified for multiple services)
-                    use_oauth21 = (
-                        is_oauth21_enabled() and authenticated_user is not None
-                    )
-
-                    # In OAuth 2.0 mode, we may need to override user_google_email
-                    if not is_oauth21_enabled():
-                        user_google_email, args = _override_oauth21_user_email(
-                            use_oauth21,
-                            authenticated_user,
-                            user_google_email,
-                            args,
-                            kwargs,
-                            wrapper_param_names,
-                            tool_name,
-                            service_type,
+                    try:
+                        # Detect OAuth version (simplified for multiple services)
+                        use_oauth21 = (
+                            is_oauth21_enabled() and authenticated_user is not None
                         )
 
-                    # Authenticate service
-                    service, _ = await _authenticate_service(
-                        use_oauth21,
-                        service_name,
-                        service_version,
-                        tool_name,
-                        user_google_email,
-                        resolved_scopes,
-                        mcp_session_id,
-                        authenticated_user,
+                        # In OAuth 2.0 mode, we may need to override user_google_email
+                        if not is_oauth21_enabled():
+                            user_google_email, args = _override_oauth21_user_email(
+                                use_oauth21,
+                                authenticated_user,
+                                user_google_email,
+                                args,
+                                kwargs,
+                                wrapper_param_names,
+                                tool_name,
+                                service_type,
+                            )
+
+                        # Authenticate service
+                        service, _ = await _authenticate_service(
+                            use_oauth21,
+                            service_name,
+                            service_version,
+                            tool_name,
+                            user_google_email,
+                            resolved_scopes,
+                            mcp_session_id,
+                            authenticated_user,
+                        )
+
+                        # Inject service with specified parameter name
+                        kwargs[param_name] = service
+                        stack.callback(service.close)
+
+                    except GoogleAuthenticationError as e:
+                        logger.error(
+                            f"[{tool_name}] GoogleAuthenticationError for service '{service_type}' (user: {user_google_email}): {e}"
+                        )
+                        # Re-raise the original error without wrapping it
+                        raise
+
+                # Call the original function with refresh error handling
+                try:
+                    # In OAuth 2.1 mode, we need to add user_google_email to kwargs since it was removed from signature
+                    if is_oauth21_enabled():
+                        kwargs["user_google_email"] = user_google_email
+
+                    return await func(*args, **kwargs)
+                except RefreshError as e:
+                    # Handle token refresh errors gracefully
+                    error_message = _handle_token_refresh_error(
+                        e, user_google_email, "Multiple Services"
                     )
-
-                    # Inject service with specified parameter name
-                    kwargs[param_name] = service
-
-                except GoogleAuthenticationError as e:
-                    logger.error(
-                        f"[{tool_name}] GoogleAuthenticationError for service '{service_type}' (user: {user_google_email}): {e}"
-                    )
-                    # Re-raise the original error without wrapping it
-                    raise
-
-            # Call the original function with refresh error handling
-            try:
-                # In OAuth 2.1 mode, we need to add user_google_email to kwargs since it was removed from signature
-                if is_oauth21_enabled():
-                    kwargs["user_google_email"] = user_google_email
-
-                return await func(*args, **kwargs)
-            except RefreshError as e:
-                # Handle token refresh errors gracefully
-                error_message = _handle_token_refresh_error(
-                    e, user_google_email, "Multiple Services"
-                )
-                raise GoogleAuthenticationError(error_message)
+                    raise GoogleAuthenticationError(error_message)
 
         # Set the wrapper's signature
         wrapper.__signature__ = wrapper_sig
@@ -830,6 +845,12 @@ def require_multiple_services(service_configs: List[Dict[str, Any]]):
             )
             if func.__doc__:
                 wrapper.__doc__ = _remove_user_email_arg_from_docstring(func.__doc__)
+
+        # Attach all required scopes to the wrapper for tool filtering
+        all_scopes = []
+        for config in service_configs:
+            all_scopes.extend(_resolve_scopes(config["scopes"]))
+        wrapper._required_google_scopes = all_scopes
 
         return wrapper
 

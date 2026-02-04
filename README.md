@@ -5,15 +5,15 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/workspace-mcp.svg)](https://pypi.org/project/workspace-mcp/)
-[![PyPI Downloads](https://static.pepy.tech/personalized-badge/workspace-mcp?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=BLUE&left_text=pip%20downloads)](https://pepy.tech/projects/workspace-mcp)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/workspace-mcp?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=BLUE&left_text=downloads)](https://pepy.tech/projects/workspace-mcp)
 [![Website](https://img.shields.io/badge/Website-workspacemcp.com-green.svg)](https://workspacemcp.com)
 
-*Full natural language control over Google Calendar, Drive, Gmail, Docs, Sheets, Slides, Forms, Tasks, and Chat through all MCP clients, AI assistants and developer tools.*
+*Full natural language control over Google Calendar, Drive, Gmail, Docs, Sheets, Slides, Forms, Tasks, Contacts, and Chat through all MCP clients, AI assistants and developer tools. Also features CLI for use with tools like Claude Code and Codex*
 
-**The most feature-complete Google Workspace MCP server**, now with Remote OAuth2.1 multi-user support and 1-click Claude installation.
+**The most feature-complete Google Workspace MCP server**, with Remote OAuth2.1 multi-user support and 1-click Claude installation.
 
 
-###### Support for all free Google accounts (Gmail, Docs, Drive etc) & Google Workspace plans (Starter, Standard, Plus, Enterprise, Non Profit) with expanded app options like Chat & Spaces. <br/> Interested in a private cloud instance? [That can be arranged.](https://workspacemcp.com/workspace-mcp-cloud)
+###### Support for all free Google accounts (Gmail, Docs, Drive etc) & Google Workspace plans (Starter, Standard, Plus, Enterprise, Non Profit) with expanded app options like Chat & Spaces. <br/><br /> Interested in a private, managed cloud instance? [That can be arranged.](https://workspacemcp.com/workspace-mcp-cloud)
 
 
 </div>
@@ -96,9 +96,9 @@ A production-ready MCP server that integrates all major Google Workspace service
 
 ---
 
-**<span style="color:#72898f">✓</span> Tasks** • **<span style="color:#72898f">◆</span> Custom Search** • **<span style="color:#72898f">↻</span> Transport Support**
-- Full support for all MCP Transports
+**<span style="color:#72898f">✓</span> Tasks** • **<span style="color:#72898f">👤</span> Contacts** • **<span style="color:#72898f">◆</span> Custom Search**
 - Task & task list management with hierarchy
+- Contact management via People API with groups
 - Programmable Search Engine (PSE) integration
 
 </td>
@@ -241,7 +241,8 @@ APIs & Services → Library
 Search & enable:
 Calendar, Drive, Gmail,
 Docs, Sheets, Slides,
-Forms, Tasks, Chat, Search
+Forms, Tasks, People,
+Chat, Search
 ```
 <sub>See quick links below</sub>
 
@@ -293,6 +294,7 @@ Forms, Tasks, Chat, Search
 * [Enable Google Forms API](https://console.cloud.google.com/flows/enableapi?apiid=forms.googleapis.com)
 * [Enable Google Tasks API](https://console.cloud.google.com/flows/enableapi?apiid=tasks.googleapis.com)
 * [Enable Google Chat API](https://console.cloud.google.com/flows/enableapi?apiid=chat.googleapis.com)
+* [Enable Google People API](https://console.cloud.google.com/flows/enableapi?apiid=people.googleapis.com)
 * [Enable Google Custom Search API](https://console.cloud.google.com/flows/enableapi?apiid=customsearch.googleapis.com)
 * [Enable Google Apps Script API](https://console.cloud.google.com/flows/enableapi?apiid=script.googleapis.com)
 
@@ -357,6 +359,7 @@ export GOOGLE_PSE_ENGINE_ID=yyy
 export WORKSPACE_MCP_BASE_URI=
   http://localhost
 export WORKSPACE_MCP_PORT=8000
+export WORKSPACE_MCP_HOST=0.0.0.0  # Use 127.0.0.1 for localhost-only
 ```
 <sub>Server URL & port settings</sub>
 
@@ -391,6 +394,7 @@ export USER_GOOGLE_EMAIL=\
 |----------|-------------|---------|
 | `WORKSPACE_MCP_BASE_URI` | Base server URI (no port) | `http://localhost` |
 | `WORKSPACE_MCP_PORT` | Server listening port | `8000` |
+| `WORKSPACE_MCP_HOST` | Server bind host | `0.0.0.0` |
 | `WORKSPACE_EXTERNAL_URL` | External URL for reverse proxy setups | None |
 | `GOOGLE_OAUTH_REDIRECT_URI` | Override OAuth callback URL | Auto-constructed |
 | `USER_GOOGLE_EMAIL` | Default auth email | None |
@@ -535,6 +539,21 @@ uv run main.py --tools sheets docs
 uv run main.py --single-user --tools gmail
 ```
 
+
+**🔒 Read-Only Mode**
+```bash
+# Requests only read-only scopes & disables write tools
+uv run main.py --read-only
+
+# Combine with specific tools or tiers
+uv run main.py --tools gmail drive --read-only
+uv run main.py --tool-tier core --read-only
+```
+Read-only mode provides secure, restricted access by:
+- Requesting only `*.readonly` OAuth scopes (e.g., `gmail.readonly`, `drive.readonly`)
+- Automatically filtering out tools that require write permissions at startup
+- Allowing read operations: list, get, search, and export across all services
+
 **★ Tool Tiers**
 ```bash
 uv run main.py --tool-tier core      # ● Essential tools only
@@ -553,13 +572,117 @@ docker run -e TOOL_TIER=core workspace-mcp
 docker run -e TOOLS="gmail drive calendar" workspace-mcp
 ```
 
-**Available Services**: `gmail` • `drive` • `calendar` • `docs` • `sheets` • `forms` • `tasks` • `chat` • `search`
+**Available Services**: `gmail` • `drive` • `calendar` • `docs` • `sheets` • `forms` • `tasks` • `contacts` • `chat` • `search`
 
 </details>
 
 </td>
 </tr>
 </table>
+
+</details>
+
+### CLI Mode
+
+The server supports a CLI mode for direct tool invocation without running the full MCP server. This is ideal for scripting, automation, and use by coding agents (Codex, Claude Code).
+
+<details open>
+<summary>▶ <b>CLI Commands</b> <sub><sup>← Direct tool execution from command line</sup></sub></summary>
+
+<table>
+<tr>
+<td width="50%" align="center">
+
+**▶ List Tools**
+```bash
+workspace-mcp --cli
+workspace-mcp --cli list
+workspace-mcp --cli list --json
+```
+<sub>View all available tools</sub>
+
+</td>
+<td width="50%" align="center">
+
+**◆ Tool Help**
+```bash
+workspace-mcp --cli search_gmail_messages --help
+```
+<sub>Show parameters and documentation</sub>
+
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+
+**▶ Run with Arguments**
+```bash
+workspace-mcp --cli search_gmail_messages \
+  --args '{"query": "is:unread"}'
+```
+<sub>Execute tool with inline JSON</sub>
+
+</td>
+<td width="50%" align="center">
+
+**◆ Pipe from Stdin**
+```bash
+echo '{"query": "is:unread"}' | \
+  workspace-mcp --cli search_gmail_messages
+```
+<sub>Pass arguments via stdin</sub>
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary>≡ <b>CLI Usage Details</b> <sub><sup>← Complete reference</sup></sub></summary>
+
+**Command Structure:**
+```bash
+workspace-mcp --cli [command] [options]
+```
+
+**Commands:**
+| Command | Description |
+|---------|-------------|
+| `list` (default) | List all available tools |
+| `<tool_name>` | Execute the specified tool |
+| `<tool_name> --help` | Show detailed help for a tool |
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--args`, `-a` | JSON string with tool arguments |
+| `--json`, `-j` | Output in JSON format (for `list` command) |
+| `--help`, `-h` | Show help for a tool |
+
+**Examples:**
+```bash
+# List all Gmail tools
+workspace-mcp --cli list | grep gmail
+
+# Search for unread emails
+workspace-mcp --cli search_gmail_messages --args '{"query": "is:unread", "max_results": 5}'
+
+# Get calendar events for today
+workspace-mcp --cli get_events --args '{"calendar_id": "primary", "time_min": "2024-01-15T00:00:00Z"}'
+
+# Create a Drive file from a URL
+workspace-mcp --cli create_drive_file --args '{"name": "doc.pdf", "source_url": "https://example.com/file.pdf"}'
+
+# Combine with jq for processing
+workspace-mcp --cli list --json | jq '.tools[] | select(.name | contains("gmail"))'
+```
+
+**Notes:**
+- CLI mode uses OAuth 2.0 (same credentials as server mode)
+- Authentication flows work the same way - browser opens for first-time auth
+- Results are printed to stdout; errors go to stderr
+- Exit code 0 on success, 1 on error
+
+</details>
 
 </details>
 
@@ -713,6 +836,7 @@ cp .env.oauth21 .env
 | `get_drive_file_content` | **Core** | Read file content (Office formats) |
 | `get_drive_file_download_url` | **Core** | Get download URL for Drive files |
 | `create_drive_file` | **Core** | Create files or fetch from URLs |
+| `import_to_google_doc` | **Core** | Import files (MD, DOCX, HTML, etc.) as Google Docs |
 | `share_drive_file` | **Core** | Share file with users/groups/domains/anyone |
 | `get_drive_shareable_link` | **Core** | Get shareable links for a file |
 | `list_drive_items` | Extended | List folder contents |
@@ -749,6 +873,30 @@ cp .env.oauth21 .env
 | `batch_modify_gmail_message_labels` | Complete | Batch modify labels |
 | `start_google_auth` | Complete | Legacy OAuth 2.0 auth (disabled when OAuth 2.1 is enabled) |
 
+<details>
+<summary><b>📎 Email Attachments</b> <sub><sup>← Send emails with files</sup></sub></summary>
+
+Both `send_gmail_message` and `draft_gmail_message` support attachments via two methods:
+
+**Option 1: File Path** (local server only)
+```python
+attachments=[{"path": "/path/to/report.pdf"}]
+```
+Reads file from disk, auto-detects MIME type. Optional `filename` override.
+
+**Option 2: Base64 Content** (works everywhere)
+```python
+attachments=[{
+    "filename": "report.pdf",
+    "content": "JVBERi0xLjQK...",  # base64-encoded
+    "mime_type": "application/pdf"   # optional
+}]
+```
+
+**⚠️ Centrally Hosted Servers**: When the MCP server runs remotely (cloud, shared instance), it cannot access your local filesystem. Use **Option 2** with base64-encoded content. Your MCP client must encode files before sending.
+
+</details>
+
 </td>
 <td width="50%" valign="top">
 
@@ -763,6 +911,7 @@ cp .env.oauth21 .env
 | `find_and_replace_doc` | Extended | Find and replace text |
 | `list_docs_in_folder` | Extended | List docs in folder |
 | `insert_doc_elements` | Extended | Add tables, lists, page breaks |
+| `update_paragraph_style` | Extended | Apply heading styles (H1-H6) and paragraph formatting |
 | `insert_doc_image` | Complete | Insert images from Drive/URLs |
 | `update_doc_headers_footers` | Complete | Modify headers and footers |
 | `batch_update_doc` | Complete | Execute multiple operations |
@@ -818,6 +967,7 @@ cp .env.oauth21 .env
 | `set_publish_settings` | Complete | Configure form settings |
 | `get_form_response` | Complete | Get individual responses |
 | `list_form_responses` | Extended | List all responses with pagination |
+| `batch_update_form` | Complete | Apply batch updates (questions, settings) |
 
 </td>
 <td width="50%" valign="top">
@@ -834,6 +984,27 @@ cp .env.oauth21 .env
 | `move_task` | Complete | Reposition tasks |
 | `clear_completed_tasks` | Complete | Hide completed tasks |
 | `*_task_list` | Complete | List/get/create/update/delete task lists |
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 👤 **Google Contacts** <sub>[`contacts_tools.py`](gcontacts/contacts_tools.py)</sub>
+
+| Tool | Tier | Description |
+|------|------|-------------|
+| `search_contacts` | **Core** | Search contacts by name, email, phone |
+| `get_contact` | **Core** | Retrieve detailed contact info |
+| `list_contacts` | **Core** | List contacts with pagination |
+| `create_contact` | **Core** | Create new contacts |
+| `update_contact` | Extended | Update existing contacts |
+| `delete_contact` | Extended | Delete contacts |
+| `list_contact_groups` | Extended | List contact groups/labels |
+| `get_contact_group` | Extended | Get group details with members |
+| `batch_*_contacts` | Complete | Batch create/update/delete contacts |
+| `*_contact_group` | Complete | Create/update/delete contact groups |
+| `modify_contact_group_members` | Complete | Add/remove contacts from groups |
 
 </td>
 </tr>

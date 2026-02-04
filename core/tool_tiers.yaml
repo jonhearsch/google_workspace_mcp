@@ -27,6 +27,7 @@ drive:
     - get_drive_file_content
     - get_drive_file_download_url
     - create_drive_file
+    - import_to_google_doc
     - share_drive_file
     - get_drive_shareable_link
   extended:
@@ -47,7 +48,7 @@ calendar:
     - get_events
     - create_event
     - modify_event
-extended:
+  extended:
     - delete_event
     - query_freebusy
   complete: []
@@ -63,6 +64,7 @@ docs:
     - find_and_replace_doc
     - list_docs_in_folder
     - insert_doc_elements
+    - update_paragraph_style
   complete:
     - insert_doc_image
     - update_doc_headers_footers
@@ -108,6 +110,7 @@ forms:
   complete:
     - set_publish_settings
     - get_form_response
+    - batch_update_form
 
 slides:
   core:
@@ -139,6 +142,26 @@ tasks:
     - delete_task_list
     - move_task
     - clear_completed_tasks
+
+contacts:
+  core:
+    - search_contacts
+    - get_contact
+    - list_contacts
+    - create_contact
+  extended:
+    - update_contact
+    - delete_contact
+    - list_contact_groups
+    - get_contact_group
+  complete:
+    - batch_create_contacts
+    - batch_update_contacts
+    - batch_delete_contacts
+    - create_contact_group
+    - update_contact_group
+    - delete_contact_group
+    - modify_contact_group_members
 
 search:
   core:
